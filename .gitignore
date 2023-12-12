@@ -1,0 +1,10 @@
+build
+install
+log
+.vscode
+__pycache__
+*.mp4
+*.avi
+*.mp4
+*.AVI
+traced_model.pt
