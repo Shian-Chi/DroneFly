@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from yolo.visionDetect import YOLO, argument, get_detect
+from yolo.visionDetect import YOLO, argument, get_detect, motorStop
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.qos import ReliabilityPolicy, QoSProfile
 import threading
@@ -36,7 +36,7 @@ class TrackerPublisher(Node):
 
         
 def YOLO_Init():
-    return argument(w_target='landpad.pt',nosave=False)
+    return argument(w_target='best.pt',nosave=True)
 
 
 def pub_sub_task(pub):
@@ -60,6 +60,7 @@ def pub_sub_Init(args=None):
         tracker_publisher.destroy_node()
         rclpy.shutdown()
     except KeyboardInterrupt:
+        motorStop()
         rclpy.shutdown()
 
 def main():

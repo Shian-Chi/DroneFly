@@ -13,7 +13,21 @@ def calcVertical_FOV(diagonal_size=4.60, horizontal_fov_deg=77):
     # Convert half of the vertical FOV to degrees
     vertical_fov_deg = math.degrees(2 * vertical_fov_rad_half)
     return vertical_fov_deg
-            
+
+
+class flag():
+    def __init__(self,state=False):
+        self.flags = state
+     
+    def setting(self,state=None):
+        if state is not None:
+            self.flags = state
+        else:
+            self.flags = not self.flags
+    
+    def get(self):
+        return self.flags
+        
 
 class Parameters():
     pi = math.pi

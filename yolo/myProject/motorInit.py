@@ -52,11 +52,12 @@ class motorSet():
     def send(self, buf=0, size=0):
         try:
 #            self.gpioHigh(11)
-            s_t = d_t*8*size/3 # delay time
+            s_t = d_t*8*size # delay time
             if size > 0:
                 wLen = self.ser.write(buf)
-            delay(s_t)
+#            delay(s_t)
 #            self.gpioLow(11)
+            print(f"send {wLen} bytes")
             return wLen
         except serial.SerialException as e:
             self.errorHandler()

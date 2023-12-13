@@ -12,7 +12,7 @@ xbee_mac = b'\x00\x13\xA2\x00\x40\xDD\xE6\x58'
 def zigbee_init():
     global ser
     ser = serial.Serial()
-    ser.port = "/dev/ttyUSB3"
+    ser.port = "/dev/ttyUSB0"
     ser.baudrate = 115200
     ser.bytesize = serial.EIGHTBITS #number of bits per bytes
     ser.parity = serial.PARITY_NONE #set parity check
@@ -23,7 +23,7 @@ def zigbee_init():
 def RTK_init():
     global RTK_ser
     RTK_ser = serial.Serial()
-    RTK_ser.port = "/dev/ttyUSB4"
+    RTK_ser.port = "/dev/ttyUSB1"
     RTK_ser.baudrate = 115200
     RTK_ser.bytesize = serial.EIGHTBITS #number of bits per bytes
     RTK_ser.parity = serial.PARITY_NONE #set parity check

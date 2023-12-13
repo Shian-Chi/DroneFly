@@ -15,7 +15,8 @@ from .utils.plots import plot_one_box
 from .utils.torch_utils import select_device, time_synchronized, TracedModel
 import numpy as np
 import datetime
-
+import threading
+from queue import Queue
 yaw = motorCtrl(1, 0.0, 90.0)
 pitch = motorCtrl(2, 0.0, 45.0)
 
@@ -56,6 +57,11 @@ def gstreamer_pipeline(
     )
 
 
+def motorStop():
+    yaw.Stop()
+    pitch.Stop()
+
+
 def motorPID_Ctrl(frameCenter_X, frameCenter_Y):
     flag, m_flag1, m_flag2 = False, False, False # Motor move status
     pidErr = pid.pid_run(frameCenter_X, frameCenter_Y)
@@ -82,11 +88,40 @@ def motorPID_Ctrl(frameCenter_X, frameCenter_Y):
     return flag
 
 
-def PID(xyxy):
+def PID(xyxy, gimbleQueue):
+    data = False
+    flag, m_flag1, m_flag2 = False, False, False # Motor move status
+    
     if xyxy is not None:
-        # Calculate the center point of the image frame
-        return motorPID_Ctrl(((xyxy[0] + xyxy[2]) / 2).item(), ((xyxy[1] + xyxy[3]) / 2).item())
-    return False
+        frameCenter_X = (xyxy[0] + xyxy[2]) / 2
+        frameCenter_Y = (xyxy[1] + xyxy[3]) / 2
+
+        pidErr = pid.pid_run(frameCenter_X, frameCenter_Y)
+
+        # Motor rotation for yaw
+        if abs(pidErr[0]) != 0:
+            yaw.IncrementTurnVal(int(pidErr[0] * 100))
+            m_flag1 = False
+        else:
+            m_flag1 = True
+
+        # Motor rotation for pitch
+        if abs(pidErr[1]) != 0:
+            pitch.IncrementTurnVal(int(pidErr[1] * 100))
+            m_flag2 = False
+        else:
+            m_flag2 = True
+
+        print(f"{pidErr[0]:.3f}", f"{pidErr[1]:.3f}")
+
+        # get Encoder and angle
+        if m_flag1 and m_flag2:
+            yaw.getEncoderAndAngle()
+            pitch.getEncoderAndAngle()
+            flag = m_flag1 and m_flag2
+            data = True
+        
+    gimbleQueue.put(data)
 
 
 class YOLO():
@@ -126,6 +161,8 @@ class YOLO():
         self.detectFlag = False
         self.target_states = False
 
+        self.xyxy = None
+        
         # Detect time
         self.t1, self.t2, self.t3 = 0, 0, 0
         self.spendTime = 0
@@ -134,8 +171,8 @@ class YOLO():
         # Capture setting
         # self.cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER)
         self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT,640)
+#        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
+#        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT,640)
         
         # Get names and colors
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
@@ -144,6 +181,15 @@ class YOLO():
         self.fourcc = cv2.VideoWriter_fourcc(*'XVID') # Define the codec for the video
         self.frameOut = None
         
+        # queue results
+        self.gimbleQueue = Queue(maxsize=10)
+        
+        # threading
+        self.thread1 = threading.Thread(target=PID, args=(self.xyxy, self.gimbleQueue))
+        
+        # multithread start
+        self.thread1.start()
+                
     def save(self, frame):
         t = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         outputPath = f'output_video_{t}.avi'
@@ -209,6 +255,7 @@ class YOLO():
 
     def loadimg(self):
         ret, self.imgs[0] = self.cap.read()
+        self.imgs[0] = cv2.rotate(self.imgs[0], cv2.ROTATE_180)
         if not ret:
             grabbed = self.cap.grab()
             if grabbed:
@@ -237,21 +284,14 @@ class YOLO():
 
     def trackingStart(self):
         try:
+            # read image
             if not self.loadimg():
                 print("No image")
                 self.cap.release()
-            im0, xyxy = self.runYOLO()
-            self.target_states = PID(xyxy)
-            # Stream results
-            if self.view_img:
-                cv2.imshow("media", im0)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    self.cap.release()
-                    self.frameOut.release()
+            im0, self.xyxy = self.runYOLO()
             
-            # Save image
-            if not self.nosave:
-                self.save(im0)
+            # get thread result
+            self.target_states = self.gimbleQueue.get()
             
             # The pitch zero point of the camera gimbal is not equal to the pitch zero point of the drone            
             pitchAngle = pitch.info.angle    
@@ -260,8 +300,23 @@ class YOLO():
             elif pitchAngle < 0.0:
                 pitchAngle -= 45.0
             
+            # Stream results
+            if self.view_img:
+                cv2.imshow("media", im0)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    motorStop()
+                    self.thread1.join()
+                    self.cap.release()
+                    self.frameOut.release()
+                    
+            # Save image
+            if not self.nosave:
+                self.save(im0)
+            
             return self.fps, self.detectFlag, self.target_states, yaw.info.angle, pitch.info.angle
         except KeyboardInterrupt or Exception:
+            motorStop()
+            self.thread1.join()
             self.cap.release()
             cv2.destroyAllWindows()
             return self.fps, self.detectFlag, self.target_states, yaw.info.angle, pitch.info.angle
@@ -272,8 +327,8 @@ def argument(w_target:str, nosave:bool):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default=w_target, help='model.pt path(s)')
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.55, help='object confidence threshold')
-    parser.add_argument('--iou-thres', type=float, default=0.4, help='IOU threshold for NMS')
+    parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
+    parser.add_argument('--iou-thres', type=float, default=0.3, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', default='False', action='store_true', help='display results')
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
