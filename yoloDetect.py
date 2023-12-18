@@ -28,7 +28,7 @@ class TrackerPublisher(Node):
         global img, motor, detect_status_falg
         if self.tracker != None:
             img.fps, img.detect_status, img.target_center_status, motor.yaw, motor.pitch = get_detect(self.tracker)
-            print(f'detect_status: {img.detect_status},target_center_status: {img.target_center_status},\nfps: {img.fps} yaw: {motor.yaw} pitch: {motor.pitch}')
+            print(f'detect_status: {img.detect_status},target_center_status: {img.target_center_status},\nfps: {img.fps:.1f} yaw: {motor.yaw:.5f} pitch: {motor.pitch:.5f}')
 
         # publisher.
         self.motor_publisher_.publish(motor)

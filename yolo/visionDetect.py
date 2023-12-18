@@ -130,6 +130,7 @@ class YOLO():
         self.old_img_w = self.old_img_h = self.imgsz
         self.old_img_b = 1
 
+        self.yoloInitStatus = False
         self.detectFlag = False
         self.target_states = False
 
@@ -147,7 +148,7 @@ class YOLO():
 
         self.fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Define the codec for the video
         self.frameOut = None
-
+    
     def yolo(self):
         # Inference
         self.t1 = time_synchronized()
@@ -171,6 +172,7 @@ class YOLO():
             max_xyxy = None  # Variable to store the xyxy with the maximum confidence
             n = 0
             if len(det):
+                self.yoloInitStatus = True
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(self.img.shape[2:], det[:, :4], im0.shape).round()
                 # Print results
