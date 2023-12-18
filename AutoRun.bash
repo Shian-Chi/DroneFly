@@ -21,9 +21,5 @@ sleep 10
 
 python3 /home/ubuntu/Documents/DroneFly/drone_ROS2_xbee_v7.py &
 
-sleep 10
-
-python3 /home/ubuntu/Documents/DroneFly/yoloDetect.py
-
 sleep 100000000
 

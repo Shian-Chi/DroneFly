@@ -233,7 +233,7 @@ class YOLO():
 
     def save(self, frame):
         t = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        outputPath = f'output_video_{t}.avi'
+        outputPath = f'video/output_video_{t}.avi'
         try:
             if self.frameOut is None:
                 self.frameOut = cv2.VideoWriter(outputPath, self.fourcc, 30, (1280, 720))
