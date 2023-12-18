@@ -15,6 +15,10 @@ ros2 run mavros mavros_node --ros-args --param fcu_url:=serial:///dev/ttyPixhawk
 
 sleep 20
 
+python3 /home/ubuntu/Documents/DroneFly/yoloDetect.py
+
+sleep 10
+
 python3 /home/ubuntu/Documents/DroneFly/drone_ROS2.py &
 
 sleep 10
