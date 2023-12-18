@@ -36,7 +36,7 @@ class TrackerPublisher(Node):
 
         
 def YOLO_Init():
-    return argument(w_target='landpad.pt')
+    return argument(w_target='best.pt')
 
 
 def pub_sub_task(pub):

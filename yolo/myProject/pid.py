@@ -6,9 +6,9 @@ para = Parameters()
 class PID_Ctrl():
     def __init__(self):
         self.kp = 0.005
-        self.ki = 0.0000001
+        self.ki = 0.000000
         self.kd = 0.00003
-        self.setpoint = [640/2, 640/2]
+        self.setpoint = [para.HD_Width/2, para.HD_Height/2]
         self.error = [0, 0]
         self.last_error = [0, 0]
         self.integral = [0, 0]
@@ -17,7 +17,7 @@ class PID_Ctrl():
     def calculate(self, process_variable):
         self.output = [0, 0]
         ### yaw ###
-        self.error[0] = (self.setpoint[0] - process_variable[0]) *-1
+        self.error[0] = (self.setpoint[0] - process_variable[0]) * -1
         if abs(self.error[0]) > 25:
             self.integral[0] += self.error[0]
             derivative_0 = self.error[0] - self.last_error[0]

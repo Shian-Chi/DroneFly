@@ -14,7 +14,9 @@ from .utils.general import check_img_size, check_imshow, non_max_suppression, sc
 from .utils.plots import plot_one_box
 from .utils.torch_utils import select_device, time_synchronized, TracedModel
 import numpy as np
-
+import datetime
+import threading
+from queue import Queue
 
 yaw = motorCtrl(1, 0.0, 90.0)
 pitch = motorCtrl(2, 0.0, 45.0)
@@ -30,10 +32,10 @@ t = 0
 
 def gstreamer_pipeline(
     sensor_id=0,
-    capture_width=para.FHD_Width,
-    capture_height=para.FHD_Height,
-    display_width=para.FHD_Width,
-    display_height=para.FHD_Height,
+    capture_width=para.HD_Width,
+    capture_height=para.HD_Height,
+    display_width=para.HD_Width,
+    display_height=para.HD_Height,
     framerate=30,
     flip_method=0,
 ):
@@ -55,6 +57,11 @@ def gstreamer_pipeline(
         )
     )
 
+
+def motorStop():
+    yaw.Stop()
+    pitch.Stop()
+    
 
 def motorPID_Ctrl(frameCenter_X, frameCenter_Y):
     flag, m_flag1, m_flag2 = False, False, False # Motor move status
@@ -129,10 +136,10 @@ class YOLO():
         self.t1, self.t2, self.t3 = 0, 0, 0
         self.spendTime = 0
         self.fps = 0.0
-        #self.cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER)
-        self.cap = cv2.VideoCapture(2)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT,640)
+        self.cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER)
+
+        self.fourcc = cv2.VideoWriter_fourcc(*'XVID') # Define the codec for the video
+        self.frameOut = None
         
         # Get names and colors
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
@@ -200,6 +207,7 @@ class YOLO():
             if grabbed:
                 ret, self.imgs[0] = self.cap.retrieve()
                 if not ret:
+                    self.cap.release()
                     return False 
         self.im0s = self.imgs.copy()
 
@@ -221,6 +229,17 @@ class YOLO():
             self.img = self.img.unsqueeze(0)
         return True
 
+    def save(self, frame):
+        t = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        outputPath = f'output_video_{t}.avi'
+        try:
+            if self.frameOut is None:
+                self.frameOut = cv2.VideoWriter(outputPath, self.fourcc, 30, (1280, 720))
+            self.frameOut.write(frame)
+        except Exception as e:
+            print("save Error: %s" % e)
+            self.frameOut.release()
+
     def trackingStart(self):
         try:
             if not self.loadimg():
@@ -232,9 +251,12 @@ class YOLO():
             if self.view_img:
                 cv2.imshow("media", im0)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
+                    motorStop()
                     self.cap.release()
                     self.frameOut.release()
-                    
+            
+            self.save(im0)
+            
             # The pitch zero point of the camera gimbal is not equal to the pitch zero point of the drone            
             pitchAngle = pitch.info.angle    
             if pitchAngle > 0.0:
@@ -244,6 +266,7 @@ class YOLO():
             
             return self.fps, self.detectFlag, self.target_states, yaw.info.angle, pitch.info.angle
         except KeyboardInterrupt or Exception:
+            motorStop()
             self.cap.release()
             cv2.destroyAllWindows()
             return self.fps, self.detectFlag, self.target_states, yaw.info.angle, pitch.info.angle
