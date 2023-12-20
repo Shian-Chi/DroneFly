@@ -21,7 +21,7 @@ from enum import Enum
 import binascii
 
 import xbee_v5 as xbee
-from tutorial_interfaces.srv import DroneStatus, DroneMissionPath
+from tutorial_interfaces.srv import DroneStatus, DroneMissionPath, ReturnAndDetectInformation
 from tutorial_interfaces.msg import Img, Motor
 
 speed_count = []
@@ -122,18 +122,17 @@ class DroneTimerTaskNode(Node):
         super().__init__('drone_xbee_timer_task')
         self.sendDroneInfo_xbee_timer = self.create_timer(1/20,self.sendDroneInfo_xbee)
         self.recv_and_pub_timer = self.create_timer(1/80,self.recv_task_code)
-        self.recv_camera_info_timer = self.create_timer(1/30,self.recv_camera_info)
-        self.service_client = DroneServiceNode()        
+        self.service_client = DroneClientNode()        
         
-    def recv_camera_info(self):
-        global droneSub
-        if ((droneSub.detect_status == True) and (droneSub.target_center_status == True)):
-            xbee.xbee_send_target_point(droneSub.latitude,droneSub.longitude,droneSub.motor_pitch,droneSub.motor_yaw)
-            print('send camera info...')
-        elif((droneSub.detect_status == True) and (droneSub.target_center_status == False)):
-            print('Target not in camera center...')
-        elif((droneSub.detect_status == False) and (droneSub.target_center_status == True)):
-            print('Detect Status is %s',droneSub.detect_status)
+    # def recv_camera_info(self):
+    #     global droneSub
+    #     if ((droneSub.detect_status == True) and (droneSub.target_center_status == True)):
+    #         xbee.xbee_send_target_point(droneSub.latitude,droneSub.longitude,droneSub.motor_pitch,droneSub.motor_yaw)
+    #         print('send camera info...')
+    #     elif((droneSub.detect_status == True) and (droneSub.target_center_status == False)):
+    #         print('Target not in camera center...')
+    #     elif((droneSub.detect_status == False) and (droneSub.target_center_status == True)):
+    #         print('Detect Status is %s',droneSub.detect_status)
     
     def recvGS(self, result):   #接收地面站State
         global droneState
@@ -338,7 +337,7 @@ class DroneTimerTaskNode(Node):
                             self.recvGS(xbee.groundControlCommand.DRONE_RSEARCH_START.value)
                             print('---------------------------------------')
                             
-class DroneServiceNode(Node):
+class DroneClientNode(Node):
     def __init__(self):
         super().__init__('drone_xbee_client')
         self._status = self.create_client(DroneStatus, 'drone_status')
@@ -368,7 +367,24 @@ class DroneServiceNode(Node):
         self.future_path = self._missionpath.call_async(self.path_req)
         rclpy.spin_until_future_complete(self, self.future_path)
         return self.future_path.result()
-    
+''' 
+class DroneServiceNode(Node):
+    def __init__(self):
+        super().__init__('drone_xbee_service')
+        self.srv_RADI = self.create_service(ReturnAndDetectInformation, 'return_and_detect_information', self.hold_recv)
+
+    def hold_recv(self, request, response):
+        global droneSub
+        if (request.hold_flag == True):
+            xbee.xbee_send_target_point(droneSub.latitude,droneSub.longitude,droneSub.motor_pitch,droneSub.motor_yaw)
+            print('send camera info...')
+            response.information_flag == True
+            print('information_flag is %s',response.information_flag)
+            return response
+        else:
+            response.information_flag == False
+            return response
+'''
 ##############################TOOL#####################################  
 def signal_handler(signal, frame):
     print("\nprogram exiting gracefully")
@@ -394,6 +410,7 @@ def pub_sub_init(args=None):
     
     droneSub.destroy_node()
     droneTimer.destroy_node()
+
     rclpy.shutdown()
 
 def main():

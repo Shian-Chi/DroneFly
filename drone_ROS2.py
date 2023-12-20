@@ -20,8 +20,7 @@ import cmath
 import math
 import struct
 from tutorial_interfaces.msg import Motor, Img
-from tutorial_interfaces.srv import DroneStatus, DroneMissionPath
-
+from tutorial_interfaces.srv import DroneStatus, DroneMissionPath, ReturnAndDetectInformation
 
 drone_point = []
 temp_detect_status = False
@@ -63,6 +62,7 @@ class DroneSubscribeNode(Node):
         self.heading = 0.0
         self.state = State()
         self.yolo_detect_status = False
+        self.camera_center = False
 
         #prevent unused variable warning
         self.AltitudeSub
@@ -165,19 +165,23 @@ class DroneClientNode(Node):
         self._takeoff = self.create_client(CommandTOL, 'mavros/cmd/takeoff')
         self.land = self.create_client(CommandTOL, 'mavros/cmd/land')
         self._setMode = self.create_client(SetMode, 'mavros/set_mode')
+        self._hold_mode = self.create_client(ReturnAndDetectInformation, 'return_and_detect_information')
 
         while not self._arming.wait_for_service(timeout_sec=1.0):
             time.sleep(1)
-        print("arming service OK")
+        print("arming  client OK")
         while not self._takeoff.wait_for_service(timeout_sec=1.0):
             time.sleep(1)
-        print("takeoff service OK")
+        print("takeoff client OK")
         while not self.land.wait_for_service(timeout_sec=1.0):
             time.sleep(1)
-        print("land service OK")
+        print("land client OK")
         while not self._setMode.wait_for_service(timeout_sec=1.0):
             time.sleep(1)
-        print("setMode service OK")
+        print("setMode client OK")
+        '''while not self._hold_mode.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('service:hold_mode not available, waiting again...')
+        print("_hold_mode client OK")'''
 
         '''all_clients = [self._arming, self._takeoff, self.land, self._setMode]
         
@@ -217,7 +221,15 @@ class DroneClientNode(Node):
         rclpy.spin_until_future_complete(self, self.future, timeout_sec=1.0)
         print("RTL------")
         return self.future.result()
-
+    
+    def requestDectectHold(self):
+        Hold = ReturnAndDetectInformation.Request()
+        Hold.hold_flag = True
+        self.future = self._hold_mode.call_async(Hold)
+        rclpy.spin_until_future_complete(self, self.future, timeout_sec=3.0)
+        print("Requst Hold------")
+        return self.future.result()
+        
 class DroneServiceNode(Node):
     def __init__(self):
         super().__init__('drone_service')
@@ -277,7 +289,7 @@ def takeoff(altitude, pub : DronePublishNode, sub : DroneSubscribeNode ,srv : Dr
         time.sleep(0.5)
     print('takeoff complete')
 
-def fly_to_global(pub : DronePublishNode, sub : DroneSubscribeNode, latitude, longitude, altitude, delta_yaw, origin_lat, origin_lon):
+def fly_to_global(pub : DronePublishNode, sub : DroneSubscribeNode, cli : DroneClientNode,latitude, longitude, altitude, delta_yaw, origin_lat, origin_lon):
     print('fly to latitude', latitude," longitude:", longitude, " delta_yaw:", delta_yaw)
 
     pub.alwaysSendPosGlobal.latitude = latitude
@@ -356,21 +368,45 @@ def fly_to_global(pub : DronePublishNode, sub : DroneSubscribeNode, latitude, lo
             if final_delta_yaw != 0:
                 print("final_delta_yaw:", final_delta_yaw)
                 pub.alwaysSendPosGlobal.yaw = degree_conv_radian(sub.yaw - final_delta_yaw)
-                while (((sub.yaw > sub.yaw + 0.1 and sub.yaw < sub.yaw - 0.1) or (sub.yolo_detect_status != True)) and (sub.yolo_detect_status == False)):
+                while ((sub.yaw > sub.yaw + 0.1 and sub.yaw < sub.yaw - 0.1) and (sub.yolo_detect_status != True)):
                     time.sleep(0.1)
                     
     if sub.yolo_detect_status == True: #辨識到目標
-        '''while sub.camera_center == True:
-            time.sleep(0.1)'''
-        time.sleep(5)
-        '''pub.alwaysSendPosGlobal.latitude = sub.latitude
+        print('---------------------------------------sub.yolo_detect_status == True')
+        temp_lat = sub.latitude
+        temp_lon = sub.longitude
+        pub.alwaysSendPosGlobal.latitude = sub.latitude
         pub.alwaysSendPosGlobal.longitude = sub.longitude
-        time.sleep(5)
-        pub.alwaysSendPosGlobal.latitude = origin_lat
-        pub.alwaysSendPosGlobal.longitude = origin_lon
-        while ((abs(origin_lat - latitude)*110936.32 > 3) or (abs(origin_lon- longitude)*101775.45 > 3)):
+        while ((abs(temp_lat - latitude)*110936.32 > 3) or (abs(temp_lon- longitude)*101775.45 > 3)):
             time.sleep(0.1)
-        global temp_detect_status
+        time.sleep(5)
+
+
+        while sub.camera_center != True:
+            print("waiting for target center")
+            time.sleep(2)
+
+        print('*'*10)
+        print('*'*10)
+        print("target is center now!")
+        print('*'*10)
+        print('*'*10)
+
+        #cli.requestDectectHold()
+        
+        '''while sub.camera_center == True:
+            time.sleep(0.1)
+        time.sleep(5)'''
+        '''temp_lat = sub.latitude
+        temp_lon = sub.longitude
+        pub.alwaysSendPosGlobal.latitude = sub.latitude
+        pub.alwaysSendPosGlobal.longitude = sub.longitude'''
+        '''time.sleep(5)
+        pub.alwaysSendPosGlobal.latitude = origin_lat
+        pub.alwaysSendPosGlobal.longitude = origin_lon'''
+        '''while ((abs(temp_lat - latitude)*110936.32 > 3) or (abs(temp_lon- longitude)*101775.45 > 3)):
+            time.sleep(0.1)'''
+        '''global temp_detect_status
         temp_detect_status = True'''
         return True #this return can not correctly return the value of True
     
@@ -570,14 +606,14 @@ if __name__ == '__main__':
                     print("轉向當前前進方位角")
                     bearing = calculate_bearing(lat1, lon1, lat2, lon2)
                     print(bearing)
-                    fly_to_global(dronePub, droneSub, origin_latitude, origin_longitude, takeoffAltitude, bearing, origin_latitude, origin_longitude)
+                    fly_to_global(dronePub, droneSub, droneCli,origin_latitude, origin_longitude, takeoffAltitude, bearing, origin_latitude, origin_longitude)
                     print("轉向前進方位角完成")
 
                     #當按下搜尋開始
                     for row in range(len(drone_point)):
                         if row == 0:
                             print("first point")
-                            fly_to_global(dronePub, droneSub, drone_point[row][2], drone_point[row][3], 10.0, 0.0, origin_latitude, origin_longitude)
+                            fly_to_global(dronePub, droneSub, droneCli, drone_point[row][2], drone_point[row][3], 10.0, 0.0, origin_latitude, origin_longitude)
                             if droneSub.yolo_detect_status == True:
                                 print("land test1")
                                 fly_to_global_without_detect(dronePub, droneSub, origin_latitude, origin_longitude, 10.0, 0.0)
@@ -590,7 +626,7 @@ if __name__ == '__main__':
                         elif (row > 0) and (row+1 < point_len) :
                             print("new point")
                             print(row)
-                            fly_to_global(dronePub, droneSub, drone_point[row][2], drone_point[row][3], 10.0, drone_point[row][4], origin_latitude, origin_longitude)
+                            fly_to_global(dronePub, droneSub, droneCli, drone_point[row][2], drone_point[row][3], 10.0, drone_point[row][4], origin_latitude, origin_longitude)
                             if droneSub.yolo_detect_status == True:
                                 print("land test2")
                                 fly_to_global_without_detect(dronePub, droneSub, origin_latitude, origin_longitude, 10.0, 0.0)
@@ -605,7 +641,7 @@ if __name__ == '__main__':
                             fly_to_global(dronePub, droneSub, drone_point[row][2], drone_point[row][3], 10.0, drone_point[row][4], origin_latitude, origin_longitude)
                             if droneSub.yolo_detect_status == True:
                                 print("land test3")
-                                fly_to_global_without_detect(dronePub, droneSub, origin_latitude, origin_longitude, 10.0, 0.0)
+                                fly_to_global_without_detect(dronePub, droneSub, droneCli, origin_latitude, origin_longitude, 10.0, 0.0)
                                 droneCli.requestLand()
                                 droneState.droneState = 0
                                 temp_status = True

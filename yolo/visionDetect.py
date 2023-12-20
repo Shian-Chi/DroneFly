@@ -113,8 +113,8 @@ class YOLO():
         self.img, self.im0s = [None], None
         self.imgs = [None] * 1
 
-        if self.trace:
-            self.model = TracedModel(self.model, self.device, self.imgsz)
+#        if self.trace:
+#            self.model = TracedModel(self.model, self.device, self.imgsz)
 
         if self.half:
             self.model.half()  # to FP16
@@ -145,9 +145,10 @@ class YOLO():
         # Get names and colors
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
         self.colors = [[random.randint(0, 255) for _ in range(3)] for _ in self.names]
-
-        self.fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Define the codec for the video
-        self.frameOut = None
+        self.yoloInitStatus = True
+    
+    def initStatus(self):
+        return self.yoloInitStatus
     
     def yolo(self):
         # Inference
@@ -172,7 +173,7 @@ class YOLO():
             max_xyxy = None  # Variable to store the xyxy with the maximum confidence
             n = 0
             if len(det):
-                self.yoloInitStatus = True
+                
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(self.img.shape[2:], det[:, :4], im0.shape).round()
                 # Print results
@@ -188,7 +189,7 @@ class YOLO():
                         max_conf = conf
                         max_xyxy = xyxy
 
-                    if self.view_img or self.nosave :
+                    if self.view_img:
                         label = f'{self.names[int(cls)]} {conf:.2f}'
                         # add bbox
                         plot_one_box(xyxy, im0, self.colors[int(cls)], label, line_thickness=2)
@@ -198,7 +199,7 @@ class YOLO():
             NMS_Time = 1E3*(self.t3-self.t2)
             self.spendTime = inferenceTime + NMS_Time
             self.fps = 1E3/self.spendTime
-            print(f'{s}Done. ({inferenceTime:.1f}ms) Inference, ({NMS_Time:.1f}ms) NMS, FPS:{self.fps:.1f}\n')
+#            print(f'{s}Done. ({inferenceTime:.1f}ms) Inference, ({NMS_Time:.1f}ms) NMS\n')
             
         return im0, max_xyxy
 
@@ -233,7 +234,7 @@ class YOLO():
 
     def save(self, frame):
         t = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        outputPath = f'video/output_video_{t}.avi'
+        outputPath = f'output_video_{t}.avi'
         try:
             if self.frameOut is None:
                 self.frameOut = cv2.VideoWriter(outputPath, self.fourcc, 30, (1280, 720))
@@ -242,6 +243,9 @@ class YOLO():
             print("save Error: %s" % e)
             self.frameOut.release()
 
+    def status():
+        return self.yoloInitStatus, self.fps, self.detectFlag, self.target_states, yaw.info.angle, pitch.info.angle
+    
     def trackingStart(self):
         try:
             if not self.loadimg():
@@ -266,12 +270,12 @@ class YOLO():
             elif pitchAngle < 0.0:
                 pitchAngle -= 45.0
             
-            return self.fps, self.detectFlag, self.target_states, yaw.info.angle, pitch.info.angle
+            return self.yoloInitStatus, self.fps, self.detectFlag, self.target_states, yaw.info.angle, pitch.info.angle
         except KeyboardInterrupt or Exception:
             motorStop()
             self.cap.release()
             cv2.destroyAllWindows()
-            return self.fps, self.detectFlag, self.target_states, yaw.info.angle, pitch.info.angle
+            return self.yoloInitStatus, self.fps, self.detectFlag, self.target_states, yaw.info.angle, pitch.info.angle
         
 
 

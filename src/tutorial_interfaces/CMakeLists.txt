@@ -40,6 +40,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Motor.msg"
   "srv/DroneMissionPath.srv"
   "srv/DroneStatus.srv"
+  "srv/ReturnAndDetectInformation.srv"
   DEPENDENCIES geometry_msgs # Add packages that above messages depend on, in this case geometry_msgs for Sphere.msg
 )
 ament_package()

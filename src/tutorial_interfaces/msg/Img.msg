@@ -1,3 +1,4 @@
 float32 fps
 bool detect_status
 bool target_center_status
+bool yolo_init_status

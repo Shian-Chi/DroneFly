@@ -1,7 +1,7 @@
 #! /bin/bash
 export DISPLAY=:0
 
-source /home/ubuntu/ros2_ws/install/setup.bash
+source /home/ubuntu/Documents/DroneFly/install/setup.bash
 
 echo "123456789" | sudo -S chmod 666 /dev/ttyRTK
 
@@ -15,7 +15,7 @@ ros2 run mavros mavros_node --ros-args --param fcu_url:=serial:///dev/ttyPixhawk
 
 sleep 20
 
-python3 /home/ubuntu/Documents/DroneFly/yoloDetect.py
+python3 /home/ubuntu/Documents/DroneFly/yoloDetect.py &
 
 sleep 10
 

@@ -38,6 +38,7 @@ yaw_delta_count_str = []
 
 point_count = 0
 flag = 0
+yolo_init_detect = False
 
 class DroneSubscribeNode(Node):
     def __init__(self):
@@ -75,6 +76,7 @@ class DroneSubscribeNode(Node):
         self.fps = 0.0
         self.detect_status = False
         self.target_center_status = False
+        self.yolo_init_status = False
 
     def MOTORcb(self, Motor):
         self.motor_pitch = Motor.pitch
@@ -123,10 +125,17 @@ class DroneTimerTaskNode(Node):
         self.sendDroneInfo_xbee_timer = self.create_timer(1/20,self.sendDroneInfo_xbee)
         self.recv_and_pub_timer = self.create_timer(1/80,self.recv_task_code)
         self.recv_camera_info_timer = self.create_timer(1/30,self.recv_camera_info)
-        self.service_client = DroneServiceNode()        
+        self.camera_init_detect = self.create_timer(1/30,self.camera_init)
+        self.service_client = DroneClientNode()        
         
+    def camera_init(self):
+        global droneSub
+        if droneSub.yolo_init_status == True:
+            yolo_detect_status = True
+
     def recv_camera_info(self):
         global droneSub
+        yolo_init(yolo_detect_status)
         if ((droneSub.detect_status == True) and (droneSub.target_center_status == True)):
             xbee.xbee_send_target_point(droneSub.latitude,droneSub.longitude,droneSub.motor_pitch,droneSub.motor_yaw)
             print('send camera info...')
@@ -137,7 +146,7 @@ class DroneTimerTaskNode(Node):
     
     def recvGS(self, result):   #接收地面站State
         global droneState
-        
+        yolo_init(yolo_detect_status)
         if result == xbee.groundControlCommand.DRONE_TAKEOFF.value:
             droneState.droneState = xbee.groundControlCommand.DRONE_TAKEOFF.value        
             status = xbee.groundControlCommand.DRONE_TAKEOFF.value                #寫入takeoff指令給topic中的msg state
@@ -167,10 +176,9 @@ class DroneTimerTaskNode(Node):
         head = bytes('\x30', 'utf-8')
         end = bytes('\x40', 'utf-8')
         drone_id = bytes('\x02', 'utf-8')
-        
         battery_temp = 0.0
-        
         global droneSub
+        yolo_init(yolo_detect_status)
         xbee.xbee_packet(b'\x30',
                             droneSub.roll,droneSub.pitch,droneSub.yaw,
                             droneSub.angu_x,droneSub.angu_y,droneSub.angu_z,
@@ -189,7 +197,7 @@ class DroneTimerTaskNode(Node):
         global drone_state,droneSub
         global ser,RTK_ser
         global flag,point_count,frame_Details
-        
+        yolo_init(yolo_detect_status)
         status = xbee.ser.inWaiting()
         if status >= 4:
             get_frame = xbee.ser.read(4)
@@ -338,7 +346,7 @@ class DroneTimerTaskNode(Node):
                             self.recvGS(xbee.groundControlCommand.DRONE_RSEARCH_START.value)
                             print('---------------------------------------')
                             
-class DroneServiceNode(Node):
+class DroneClientNode(Node):
     def __init__(self):
         super().__init__('drone_xbee_client')
         self._status = self.create_client(DroneStatus, 'drone_status')
@@ -370,6 +378,10 @@ class DroneServiceNode(Node):
         return self.future_path.result()
     
 ##############################TOOL#####################################  
+def yolo_init(detect):
+    while detect is not True:
+        print('Waiting yolo initialization...')
+
 def signal_handler(signal, frame):
     print("\nprogram exiting gracefully")
     rclpy.shutdown()
